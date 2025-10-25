@@ -1,0 +1,6 @@
+gymnasium~=1.2.1
+pddl-plus-parser==3.16.0
+ray==2.50.1
+sympy==1.14.0
+anytree==2.13.0
+networkx==3.5
