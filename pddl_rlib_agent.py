@@ -1,7 +1,9 @@
 import argparse
+import logging
 from pathlib import Path
 
 from ray.rllib.algorithms.ppo import PPOConfig
+from ray.rllib.connectors.env_to_module import FlattenObservations
 
 from pddl_generic_env_creator import PDDLEnv
 
@@ -13,20 +15,32 @@ def train_agent(domain_path: Path, problems_folder_path: Path, problem_prefix: s
             "domain_path": domain_path,
             "problem_path": problem_path,
             "max_steps": max_steps,
+
         }
-        # with this:
+
         config = (
             PPOConfig()
             .environment(env=PDDLEnv, env_config=env_config)
-            .training(gamma=0.9, lr=0.01, kl_coeff=0.3, train_batch_size_per_learner=256)
+            .env_runners(env_to_module_connector=lambda env: FlattenObservations())
+            .framework("torch")
+            # Usual PPO knobs
+            .training(
+                gamma=0.995,
+                lr=3e-4,
+                train_batch_size_per_learner=4096,
+                num_sgd_iter=10,
+                kl_coeff=0.2,
+            )
+            .resources(num_gpus=0)
         )
-        algo = config.build()
+        algo = config.build_algo()
 
         for i in range(10):  # Number of training iterations
             result = algo.train()
-            print(f"Iteration {i}: reward_mean = {result['episode_reward_mean']}")
+            print(f"[{i:02d}] done={bool(result['done'])} reward={result['env_runners']['episode_return_mean']:.3f}")
+            break
 
-        # Save the trained agent
+        # # Save the trained agent
         checkpoint = algo.save()
         print(f"Checkpoint saved at {checkpoint}")
 
@@ -48,7 +62,7 @@ def parse_arguments():
         help="Path folder containing the PDDL files.",
     )
     parser.add_argument(
-        "--problem_prefix",
+        "--problems_prefix",
         type=str,
         required=True,
         help="The prefix for the problem names to search only for these files.",
@@ -58,8 +72,9 @@ def parse_arguments():
 
 if __name__ == '__main__':
     args = parse_arguments()
+    logging.basicConfig(level=logging.INFO)
     train_agent(
         domain_path=Path(args.domain_path),
         problems_folder_path=Path(args.problems_folder_path),
-        problem_prefix=args.problem_prefix,
+        problem_prefix=args.problems_prefix,
     )

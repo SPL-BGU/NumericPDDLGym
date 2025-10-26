@@ -1,26 +1,37 @@
 import logging
-from typing import Dict, Any, Set
+from typing import Dict, Any, Set, List
 
 import gymnasium as gym
+import numpy as np
 from gymnasium import spaces, register
 from pddl_plus_parser.lisp_parsers import DomainParser, ProblemParser
 from pddl_plus_parser.models import Domain, State, PDDLFunction, NumericalExpressionTree, Operator, \
-    evaluate_expression, VocabularyCreator
+    evaluate_expression, VocabularyCreator, GroundedPredicate
+
+INAPPLICABLE_ACTION_PENALTY = 0.5
 
 
 class PDDLEnv(gym.Env):
     metadata = {"render_modes": ["human"]}
 
     domain: Domain
+    grounded_predicates: List[GroundedPredicate]
+    grounded_functions: List[PDDLFunction]
 
     def __init__(self, config: Dict[str, Any] = None):
         super().__init__()
+        self.logger = logging.getLogger(__name__)
+        self.config = config or {}
+        self.max_steps = int(self.config.get("max_steps", 5000))
+        self.goal_reward = 100.0
+
+        # --- Parse PDDL
         self.domain = DomainParser(domain_path=config["domain_path"]).parse_domain()
         self.problem = ProblemParser(problem_path=config["problem_path"], domain=self.domain).parse_problem()
-        self.config = config or {}
         self.vocabulary_creator = VocabularyCreator()
-        self.max_steps = int(self.config.get("max_steps", 500))
-        self.goal_reward = 1.0
+
+
+        # --- Build grounded vocabularies
         self.grounded_actions = list(
             self.vocabulary_creator.create_grounded_actions_vocabulary(self.domain, self.problem.objects))
         grounded_predicates = self.vocabulary_creator.create_grounded_predicate_vocabulary(self.domain,
@@ -30,17 +41,18 @@ class PDDLEnv(gym.Env):
         for predicates_set in grounded_predicates.values():
             self.grounded_predicates.extend([p.copy() for p in predicates_set])
 
+        # --- Spaces
         self.action_space = spaces.Discrete(len(self.grounded_actions))
         # The observation space is defined by the values of the predicates and numeric functions
-        self.observation_space = spaces.Dict({
-            "predicates": spaces.MultiBinary(len(self.grounded_predicates)),
-            "functions": spaces.Box(low=-float('inf'), high=float('inf'), shape=(len(self.grounded_functions),)),
-        })
-
+        self.observation_space = spaces.Dict(
+            {
+                "predicates": spaces.MultiBinary(len(self.grounded_predicates)),
+                "functions": spaces.Box(-500.0, 500.0,  (len(self.grounded_functions),), dtype=np.float32)
+            }
+        )
         self.state = State(predicates=self.problem.initial_state_predicates, fluents=self.problem.initial_state_fluents)
-        self.env_state = self._state_to_obs(self.state)
+        self.env_state = self._state_to_observation(self.state)
         self.steps = 0
-        self.logger = logging.getLogger(__name__)
 
     def _assign_state_fluent_value(
             self, state_fluents: Dict[str, PDDLFunction], goal_required_expressions: Set[NumericalExpressionTree]
@@ -59,28 +71,36 @@ class PDDLEnv(gym.Env):
                     if state_fluent.untyped_representation == expression_function.untyped_representation:
                         expression_function.set_value(state_fluent.value)
 
-    def _state_to_obs(self, state: State) -> Any:
+    def _state_to_observation(self, state: State) -> Any:
         """Converts the PDDL state to the observation format.
 
         :param state: the PDDL state to convert.
         :return: the observation representation of the state.
         """
-        predicate_values = []
+        predicate_values = np.zeros((len(self.grounded_predicates), ), dtype=bool)
+        # add assertion that verifies that the predicates are unique in the grounded predicates list
+
         for grounded_predicate in self.grounded_predicates:
-            for state_predicate in state.state_predicates[grounded_predicate.name]:
-                if grounded_predicate.signature == state_predicate.signature:
-                    predicate_values.append(int(state_predicate.is_positive))
+            if grounded_predicate.lifted_untyped_representation not in state.state_predicates:
+                self.logger.debug(f"Predicate {grounded_predicate.name} not in state {state} -- set to false (zero).")
+                continue
+
+            for state_predicate in state.state_predicates[grounded_predicate.lifted_untyped_representation]:
+                if grounded_predicate.grounded_objects == state_predicate.grounded_objects:
+                    predicate_values[self.grounded_predicates.index(grounded_predicate)] = True
                     break
 
         # We assume that no function just appears in the state without being defined in the problem initial state fluents
-        function_values = []
-        for grounded_function in self.grounded_functions:
-            function_values.append(state.state_fluents[grounded_function.untyped_representation].value)
+        function_values = np.zeros(len(self.grounded_functions), dtype=np.float32)
+        for i, grounded_function in enumerate(self.grounded_functions):
+            pddl_func = state.state_fluents.get(grounded_function.untyped_representation)
+            function_values[i] = float(pddl_func.value) if pddl_func is not None else 0.0
 
         obs = {
             "predicates": predicate_values,
             "functions": function_values,
         }
+        self.logger.debug("Observation content: {}".format(obs))
         return obs
 
     def _goal_satisfied(self, state: State) -> bool:
@@ -110,7 +130,7 @@ class PDDLEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.state = State(predicates=self.problem.initial_state_predicates, fluents=self.problem.initial_state_fluents)
-        self.env_state = self._state_to_obs(self.state)
+        self.env_state = self._state_to_observation(self.state)
 
         self.steps = 0
         return self.env_state, {}
@@ -119,6 +139,7 @@ class PDDLEnv(gym.Env):
         # convert action_id to ActionCall
         action_call = self.grounded_actions[action_id]
         new_state = self.state.copy()
+        called_inapplicable_action = False
         operator = Operator(
             action=self.domain.actions[action_call.name],
             domain=self.domain,
@@ -130,10 +151,14 @@ class PDDLEnv(gym.Env):
 
         except ValueError:
             self.logger.debug(f"Could not apply the action {str(operator)} to the state.")
+            called_inapplicable_action = True
 
         self.state = new_state
-        self.env_state = self._state_to_obs(self.state)
+        self.env_state = self._state_to_observation(self.state)
         self.steps += 1
-        done = self._goal_satisfied(new_state)
 
-        return self.env_state, int(done), done, False, {}
+        done = self._goal_satisfied(new_state)
+        reward = (self.goal_reward if done else 0.0) + (-INAPPLICABLE_ACTION_PENALTY if called_inapplicable_action else 0.0)
+        info = {"is_inapplicable": called_inapplicable_action}
+        truncated = self.steps >= self.max_steps
+        return self.env_state, reward, done, truncated, info
