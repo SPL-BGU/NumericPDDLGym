@@ -1,14 +1,17 @@
 import logging
+from pathlib import Path
 from typing import Dict, Any, Set, List
 
 import gymnasium as gym
 import numpy as np
-from gymnasium import spaces, register
+from gymnasium import spaces
 from pddl_plus_parser.lisp_parsers import DomainParser, ProblemParser
 from pddl_plus_parser.models import Domain, State, PDDLFunction, NumericalExpressionTree, Operator, \
-    evaluate_expression, VocabularyCreator, GroundedPredicate
+    evaluate_expression, VocabularyCreator, GroundedPredicate, ActionCall
 
-INAPPLICABLE_ACTION_PENALTY = 0.5
+from misc import get_grounded_predicates_space_size, get_actions_space_size
+
+INAPPLICABLE_ACTION_PENALTY = 0.05
 
 
 class PDDLEnv(gym.Env):
@@ -17,42 +20,31 @@ class PDDLEnv(gym.Env):
     domain: Domain
     grounded_predicates: List[GroundedPredicate]
     grounded_functions: List[PDDLFunction]
+    grounded_actions: List[ActionCall]
 
     def __init__(self, config: Dict[str, Any] = None):
         super().__init__()
         self.logger = logging.getLogger(__name__)
         self.config = config or {}
-        self.max_steps = int(self.config.get("max_steps", 5000))
+        self.max_steps = int(self.config.get("max_steps", 15000))
         self.goal_reward = 100.0
 
-        # --- Parse PDDL
         self.domain = DomainParser(domain_path=config["domain_path"]).parse_domain()
         self.problem = ProblemParser(problem_path=config["problem_path"], domain=self.domain).parse_problem()
-        self.vocabulary_creator = VocabularyCreator()
-
-
-        # --- Build grounded vocabularies
-        self.grounded_actions = list(
-            self.vocabulary_creator.create_grounded_actions_vocabulary(self.domain, self.problem.objects))
-        grounded_predicates = self.vocabulary_creator.create_grounded_predicate_vocabulary(self.domain,
-                                                                                           self.problem.objects)
+        self.vocabulary_creator = None
         self.grounded_predicates = []
-        self.grounded_functions = list(self.problem.initial_state_fluents.values())
-        for predicates_set in grounded_predicates.values():
-            self.grounded_predicates.extend([p.copy() for p in predicates_set])
-
-        # --- Spaces
-        self.action_space = spaces.Discrete(len(self.grounded_actions))
-        # The observation space is defined by the values of the predicates and numeric functions
-        self.observation_space = spaces.Dict(
-            {
-                "predicates": spaces.MultiBinary(len(self.grounded_predicates)),
-                "functions": spaces.Box(-500.0, 500.0,  (len(self.grounded_functions),), dtype=np.float32)
-            }
-        )
-        self.state = State(predicates=self.problem.initial_state_predicates, fluents=self.problem.initial_state_fluents)
-        self.env_state = self._state_to_observation(self.state)
+        self.grounded_functions = []
+        self.grounded_actions = []
+        self.state = None
         self.steps = 0
+        num_predicates = get_grounded_predicates_space_size(domain=self.domain, problem=self.problem)
+        num_functions = len(self.problem.initial_state_fluents)
+        num_grounded_actions = get_actions_space_size(domain=self.domain, problem=self.problem)
+        self.env_state = np.zeros((num_predicates + num_functions,), dtype=np.int32)
+
+        self.observation_space = spaces.Box(low=-500, high=500, shape=(num_predicates + num_functions,),
+                                            dtype=np.float32)
+        self.action_space = spaces.Discrete(num_grounded_actions)
 
     def _assign_state_fluent_value(
             self, state_fluents: Dict[str, PDDLFunction], goal_required_expressions: Set[NumericalExpressionTree]
@@ -77,8 +69,8 @@ class PDDLEnv(gym.Env):
         :param state: the PDDL state to convert.
         :return: the observation representation of the state.
         """
-        predicate_values = np.zeros((len(self.grounded_predicates), ), dtype=bool)
-        # add assertion that verifies that the predicates are unique in the grounded predicates list
+        predicate_values = np.zeros((len(self.grounded_predicates),), dtype=np.float32)
+        function_values = np.zeros((len(self.grounded_functions),), dtype=np.float32)
 
         for grounded_predicate in self.grounded_predicates:
             if grounded_predicate.lifted_untyped_representation not in state.state_predicates:
@@ -91,15 +83,11 @@ class PDDLEnv(gym.Env):
                     break
 
         # We assume that no function just appears in the state without being defined in the problem initial state fluents
-        function_values = np.zeros(len(self.grounded_functions), dtype=np.float32)
         for i, grounded_function in enumerate(self.grounded_functions):
             pddl_func = state.state_fluents.get(grounded_function.untyped_representation)
             function_values[i] = float(pddl_func.value) if pddl_func is not None else 0.0
 
-        obs = {
-            "predicates": predicate_values,
-            "functions": function_values,
-        }
+        obs = np.concatenate((predicate_values, function_values))
         self.logger.debug("Observation content: {}".format(obs))
         return obs
 
@@ -121,7 +109,7 @@ class PDDLEnv(gym.Env):
 
         if goal_predicates.issubset(state_predicates) and all(
                 [evaluate_expression(fluent.root) for fluent in goal_fluents]):
-            self.logger.info("The IPC agent has reached the goal state.")
+            self.logger.info(f"The IPC agent has reached the goal state in step number {self.steps}.")
             return True
 
         self.logger.debug("Goal has not been reached according to the IPC agent.")
@@ -133,7 +121,35 @@ class PDDLEnv(gym.Env):
         self.env_state = self._state_to_observation(self.state)
 
         self.steps = 0
+        self.logger.debug("Reset function observation: {}".format(self.env_state))
         return self.env_state, {}
+
+    def load_problem(self, problem_path: Path) -> None:
+        self.logger.info("Loading problem from {}".format(problem_path))
+        self.problem = ProblemParser(problem_path=problem_path, domain=self.domain).parse_problem()
+        self.logger.debug("Problem loaded. {}".format(str(self.problem)))
+        self.vocabulary_creator = VocabularyCreator()
+
+        # --- Build grounded vocabularies
+        self.grounded_actions = sorted(list(
+            self.vocabulary_creator.create_grounded_actions_vocabulary(self.domain, self.problem.objects)),
+            key=lambda a: str(a))
+        grounded_predicates = self.vocabulary_creator.create_grounded_predicate_vocabulary(self.domain,
+                                                                                           self.problem.objects)
+
+        self.grounded_predicates = []
+        self.grounded_functions = sorted(list(self.problem.initial_state_fluents.values()),
+                                         key=lambda f: f.untyped_representation)
+        for predicates_set in grounded_predicates.values():
+            self.grounded_predicates.extend([p.copy() for p in predicates_set])
+
+        self.grounded_predicates.sort(key=lambda p: p.untyped_representation)
+
+        # --- Spaces
+        self.state = State(predicates=self.problem.initial_state_predicates, fluents=self.problem.initial_state_fluents)
+        self.env_state = self._state_to_observation(self.state)
+
+        self.steps = 0
 
     def step(self, action_id: int):
         # convert action_id to ActionCall
@@ -158,7 +174,8 @@ class PDDLEnv(gym.Env):
         self.steps += 1
 
         done = self._goal_satisfied(new_state)
-        reward = (self.goal_reward if done else 0.0) + (-INAPPLICABLE_ACTION_PENALTY if called_inapplicable_action else 0.0)
+        reward = self.goal_reward if done is True else 0.0
+
         info = {"is_inapplicable": called_inapplicable_action}
         truncated = self.steps >= self.max_steps
         return self.env_state, reward, done, truncated, info
