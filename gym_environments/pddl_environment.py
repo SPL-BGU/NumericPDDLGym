@@ -9,7 +9,7 @@ from pddl_plus_parser.lisp_parsers import DomainParser, ProblemParser
 from pddl_plus_parser.models import Domain, State, PDDLFunction, NumericalExpressionTree, Operator, \
     evaluate_expression, VocabularyCreator, GroundedPredicate, ActionCall
 
-from misc import get_grounded_predicates_space_size, get_actions_space_size
+from gym_environments.misc import get_grounded_predicates_space_size, get_actions_space_size
 
 INAPPLICABLE_ACTION_PENALTY = 0.05
 
@@ -21,6 +21,7 @@ class PDDLEnv(gym.Env):
     grounded_predicates: List[GroundedPredicate]
     grounded_functions: List[PDDLFunction]
     grounded_actions: List[ActionCall]
+    last_action: ActionCall
 
     def __init__(self, config: Dict[str, Any] = None):
         super().__init__()
@@ -45,6 +46,7 @@ class PDDLEnv(gym.Env):
         self.observation_space = spaces.Box(low=-500, high=500, shape=(num_predicates + num_functions,),
                                             dtype=np.float32)
         self.action_space = spaces.Discrete(num_grounded_actions)
+        self.last_action = None
 
     def _assign_state_fluent_value(
             self, state_fluents: Dict[str, PDDLFunction], goal_required_expressions: Set[NumericalExpressionTree]
@@ -153,13 +155,13 @@ class PDDLEnv(gym.Env):
 
     def step(self, action_id: int):
         # convert action_id to ActionCall
-        action_call = self.grounded_actions[action_id]
+        self.last_action = self.grounded_actions[action_id]
         new_state = self.state.copy()
         called_inapplicable_action = False
         operator = Operator(
-            action=self.domain.actions[action_call.name],
+            action=self.domain.actions[self.last_action.name],
             domain=self.domain,
-            grounded_action_call=action_call.parameters,
+            grounded_action_call=self.last_action.parameters,
             problem_objects=self.problem.objects,
         )
         try:

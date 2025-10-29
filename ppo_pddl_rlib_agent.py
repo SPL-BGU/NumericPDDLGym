@@ -6,11 +6,12 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.core.rl_module import RLModuleSpec
 from ray.tune import register_env
 
+from agents.logging_callbacks import LogAlgorithmActions
 from learned_legality_module import ActionMaskingTorchRLModule
 from gym_environments.pddl_masked_environment import PDDLMaskedEnv
 
 
-def train_agent(domain_path: Path, problems_folder_path: Path, problem_prefix: str, max_steps: int = 10000):
+def train_agent(domain_path: Path, problems_folder_path: Path, problem_prefix: str, max_steps: int = 1000):
     default_problem_path = list(problems_folder_path.glob(f"{problem_prefix}*.pddl"))[0]
     env = PDDLMaskedEnv({
         "domain_path": domain_path,
@@ -45,6 +46,9 @@ def train_agent(domain_path: Path, problems_folder_path: Path, problem_prefix: s
                 },
             ),
         )
+        .callbacks(
+            callbacks_class=LogAlgorithmActions,
+        )
     )
     algo = config.build_algo()
 
@@ -52,9 +56,8 @@ def train_agent(domain_path: Path, problems_folder_path: Path, problem_prefix: s
         print(f"Training the algorithm on the problem file: {problem_path}")
         env.load_problem(problem_path)
         result = algo.train()
-        print(f"[{problem_path.stem}] reward={result['env_runners'].get('episode_return_mean', 0)}")
+        print(f"[{problem_path.stem}] done={result['done']} reward={result['env_runners'].get('episode_return_mean', 0)}")
         env.reset()
-
 
 
 def parse_arguments():
