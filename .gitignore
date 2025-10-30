@@ -10,7 +10,8 @@ __pycache__/
 .vscode/
 .idea/
 
-traces/*
+results_directory/*
+results_directory/traces/*
 
 # Distribution / packaging
 .Python

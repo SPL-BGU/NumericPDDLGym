@@ -4,37 +4,34 @@ from pathlib import Path
 
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.core.rl_module import RLModuleSpec
-from ray.tune import register_env
 
 from agents.logging_callbacks import LogAlgorithmActions
-from learned_legality_module import ActionMaskingTorchRLModule
 from gym_environments.pddl_masked_environment import PDDLMaskedEnv
+from valid_actions_module import ActionMaskingTorchRLModule
 
 
-def train_agent(domain_path: Path, problems_folder_path: Path, problem_prefix: str, max_steps: int = 1000):
-    default_problem_path = list(problems_folder_path.glob(f"{problem_prefix}*.pddl"))[0]
-    env = PDDLMaskedEnv({
+def train_agent(domain_path: Path, problems_folder_path: Path, problem_prefix: str, max_steps: int = 1000,
+                batch_size: int = 1000):
+    config = {
         "domain_path": domain_path,
         "max_steps": max_steps,
-        "problem_path": default_problem_path,
-    })
-    env.load_problem(default_problem_path)
-
-    register_env("pddl_masked_env_singleton", lambda cfg: env)
+        "problems_list": list(problems_folder_path.glob(f"{problem_prefix}*.pddl")),
+    }
 
     config = (
         PPOConfig()
         .api_stack(enable_rl_module_and_learner=True)
-        .environment(env="pddl_masked_env_singleton")
+        .environment(env=PDDLMaskedEnv, env_config=config)
         .framework("torch")
         # Usual PPO knobs
         .training(
             gamma=0.995,
             lr=3e-4,
-            train_batch_size_per_learner=4096,
+            train_batch_size_per_learner=batch_size,
             kl_coeff=0.2,
         )
         .resources(num_gpus=0)
+        .env_runners(num_env_runners=0)
         .rl_module(
             # We need to explicitly specify here RLModule to use and
             # the catalog needed to build it.
@@ -54,10 +51,8 @@ def train_agent(domain_path: Path, problems_folder_path: Path, problem_prefix: s
 
     for problem_path in problems_folder_path.glob(f"{problem_prefix}*.pddl"):
         print(f"Training the algorithm on the problem file: {problem_path}")
-        env.load_problem(problem_path)
         result = algo.train()
-        print(f"[{problem_path.stem}] done={result['done']} reward={result['env_runners'].get('episode_return_mean', 0)}")
-        env.reset()
+        print(f"[{problem_path.stem}] reward={result['env_runners'].get('episode_return_mean', 0)}")
 
 
 def parse_arguments():

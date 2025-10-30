@@ -1,8 +1,7 @@
-import gymnasium as gym
 from typing import Dict, Optional, Tuple, Union
 
+import gymnasium as gym
 from ray.rllib.algorithms.ppo.torch.default_ppo_torch_rl_module import DefaultPPOTorchRLModule
-from ray.rllib.algorithms.ppo.torch.ppo_torch_rl_module import PPOTorchRLModule
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.apis.value_function_api import ValueFunctionAPI
 from ray.rllib.core.rl_module.default_model_config import DefaultModelConfig
@@ -16,21 +15,10 @@ torch, nn = try_import_torch()
 
 
 class ActionMaskingRLModule(RLModule):
-    """An RLModule that implements an action masking for safe RL.
-
-    This RLModule implements action masking to avoid unsafe/unwanted actions
-    dependent on the current state (observations). It does so by using an
-    environment generated action mask defining which actions are allowed and
-    which should be avoided. The action mask is extracted from the
-    environment's `gymnasium.spaces.dict.Dict` observation and applied after
-    the module's `forward`-pass to the action logits. The resulting action
-    logits prevent unsafe/unwanted actions to be sampled from the corresponding
-    action distribution.
-
-    Note, this RLModule is implemented for the `PPO` algorithm only. It is not
-    guaranteed to work with other algorithms. Furthermore, not that for this
-    module to work it requires an environment with a `gymnasium.spaces.dict.Dict`
-    observation space containing tow key, `"action_mask"` and `"observations"`.
+    """
+    A custom RLModule that supports action masking. This module modifies the observation
+    space to include an action mask, which is used to restrict the available actions
+    during inference, exploration, and training.
     """
 
     @override(RLModule)

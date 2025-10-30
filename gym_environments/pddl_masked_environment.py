@@ -28,9 +28,9 @@ class PDDLMaskedEnv(PDDLEnv):
 
         self.state_dependant_action_mask[state_str][action_index] = 1.0 if is_inapplicable else 0.0
 
-    def load_problem(self, problem_path: Path) -> None:
+    def _load_problem(self, problem_path: Path) -> None:
         """Load a PDDL problem from its path."""
-        super().load_problem(problem_path)
+        super()._load_problem(problem_path)
         if self.reset_action_mask_between_problems:
             self.state_dependant_action_mask = defaultdict(dict)
 
