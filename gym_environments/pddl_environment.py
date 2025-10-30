@@ -45,10 +45,10 @@ class PDDLEnv(gym.Env):
         num_predicates = get_grounded_predicates_space_size(domain=self.domain, problem=self.current_problem)
         num_functions = len(self.current_problem.initial_state_fluents)
         num_grounded_actions = get_actions_space_size(domain=self.domain, problem=self.current_problem)
-        self.env_state = np.zeros((num_predicates + num_functions,), dtype=np.int32)
+        self.env_state = np.zeros((num_predicates + num_functions + num_predicates,), dtype=np.float32)
         # currently supporting only boolean goals.
         self.observation_space = spaces.Box(low=-500, high=500, shape=(
-            num_predicates + num_functions + len(self.current_problem.goal_state_predicates),),
+            num_predicates + num_functions + num_predicates,),
                                             dtype=np.float32)
         self.action_space = spaces.Discrete(num_grounded_actions)
         self.last_action = None
