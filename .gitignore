@@ -9,6 +9,7 @@ __pycache__/
 # IDE generated files
 .vscode/
 .idea/
+.run/
 
 results_directory/*
 results_directory/traces/*

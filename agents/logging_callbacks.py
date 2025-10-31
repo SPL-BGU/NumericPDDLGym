@@ -9,6 +9,7 @@ from ray.rllib.env.single_agent_episode import SingleAgentEpisode
 
 OUTPUT_DIRECTORY_PATH = os.environ.get("OUTPUT_DIRECTORY_PATH", "results_directory")
 STATISTICS_COL_NAMES = [
+    "executing_algorithm",
     "domain_name",
     "trained_instance",
     "episode_id",
@@ -19,8 +20,8 @@ STATISTICS_COL_NAMES = [
     "action_space_size",
 ]
 
-class LogAlgorithmActions(RLlibCallback):
 
+class LogAlgorithmActions(RLlibCallback):
     trace: List[ActionCall]
 
     def __init__(self, **kwargs):
@@ -32,6 +33,7 @@ class LogAlgorithmActions(RLlibCallback):
         print("Episode ended. Collecting statistics and outputting the results...")
         problem_name = episode.infos.data[1]["problem_name"]
         domain_name = episode.infos.data[1]["domain_name"]
+        executing_algorithm = episode.infos.data[1]["executing_algorithm"]
         average_reward = sum(episode.rewards) / len(episode.rewards)
         total_executed_actions = 0
         num_failed_actions = 0
@@ -52,6 +54,7 @@ class LogAlgorithmActions(RLlibCallback):
 
             csv_writer.writerow(
                 {
+                    "executing_algorithm": executing_algorithm,
                     "domain_name": domain_name,
                     "trained_instance": problem_name,
                     "episode_id": episode.id_,
@@ -64,9 +67,8 @@ class LogAlgorithmActions(RLlibCallback):
             )
 
         # Save the trace to a and collect statistics about the learning.
-        traces_dir = Path(OUTPUT_DIRECTORY_PATH) / "traces"
-        traces_dir.mkdir(exist_ok=True)
-        with open(traces_dir / f"trace_{problem_name}_{episode.id_}.txt", "w") as trace_file:
-            for action in actions:
-                trace_file.write(action + "\n")
-
+        # traces_dir = Path(OUTPUT_DIRECTORY_PATH) / "traces"
+        # traces_dir.mkdir(exist_ok=True)
+        # with open(traces_dir / f"trace_{problem_name}_{episode.id_}.txt", "w") as trace_file:
+        #     for action in actions:
+        #         trace_file.write(action + "\n")

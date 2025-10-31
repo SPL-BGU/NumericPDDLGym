@@ -21,12 +21,18 @@ class PDDLMaskedEnv(PDDLEnv):
             }
         )
 
-    def _update_mask(self, state: np.ndarray, action_index: int, is_inapplicable: bool):
+    def _update_mask(self, state: np.ndarray, action_index: int, is_inapplicable: bool) -> None:
+        """Update the action mask for a given state and action.
+
+        :param state: the state which the action was taken on.
+        :param action_index: the index of the action taken.
+        :param is_inapplicable: whether the action was inapplicable in the given state.
+        """
         state_str = str(state)
         if state_str not in self.state_dependant_action_mask:
             self.state_dependant_action_mask[state_str] = np.ones((self.action_space.n,), dtype=np.float32)
 
-        self.state_dependant_action_mask[state_str][action_index] = 1.0 if is_inapplicable else 0.0
+        self.state_dependant_action_mask[state_str][action_index] = 0.0 if is_inapplicable else 1.0
 
     def _load_problem(self, problem_path: Path) -> None:
         """Load a PDDL problem from its path."""
@@ -37,7 +43,7 @@ class PDDLMaskedEnv(PDDLEnv):
     def step(self, action_index: int):
         prev_state = self.env_state.copy()
         observation, reward, done, truncated, info = super().step(action_index)
-        self._update_mask(prev_state, action_index, False)
+        self._update_mask(state=prev_state, action_index=action_index, is_inapplicable=info["is_inapplicable"])
         new_state_mask = np.ones((self.action_space.n,),
                                  dtype=np.float32) if str(observation) not in self.state_dependant_action_mask else \
             self.state_dependant_action_mask[str(observation)]

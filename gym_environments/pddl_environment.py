@@ -32,10 +32,12 @@ class PDDLEnv(gym.Env):
         self.goal_reward = 100.0
 
         self.domain = DomainParser(domain_path=config["domain_path"]).parse_domain()
-        self.current_problem = ProblemParser(problem_path=config["problems_list"][0], domain=self.domain).parse_problem()
+        self.current_problem = ProblemParser(problem_path=config["problems_list"][0],
+                                             domain=self.domain).parse_problem()
         self.problem_paths_list: List[Path] = config.get("problems_list", [])
         self._problem_name = config["problems_list"][0].stem
         self._domain_name = config["domain_path"].stem
+        self._executing_algorithm = config.get("executing_algorithm", "Unknown")
         self.vocabulary_creator = None
         self.grounded_predicates = []
         self.grounded_functions = []
@@ -156,7 +158,8 @@ class PDDLEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self._load_problem(self.problem_paths_list.pop(0))
-        self.state = State(predicates=self.current_problem.initial_state_predicates, fluents=self.current_problem.initial_state_fluents)
+        self.state = State(predicates=self.current_problem.initial_state_predicates,
+                           fluents=self.current_problem.initial_state_fluents)
         self.env_state = self._state_to_observation(self.state)
 
         self.steps = 0
@@ -188,7 +191,13 @@ class PDDLEnv(gym.Env):
         done = self._goal_satisfied(new_state)
         reward = self.goal_reward if done is True else 0.0
 
-        info = {"is_inapplicable": called_inapplicable_action, "executed_action": str(self.last_action),
-                "problem_name": self._problem_name, "domain_name": self._domain_name, "num_grounded_actions": len(self.grounded_actions)}
+        info = {
+            "is_inapplicable": called_inapplicable_action,
+            "executed_action": str(self.last_action),
+            "problem_name": self._problem_name,
+            "domain_name": self._domain_name,
+            "num_grounded_actions": len(self.grounded_actions),
+            "executing_algorithm": self._executing_algorithm
+        }
         truncated = self.steps >= self.max_steps
         return self.env_state, reward, done, truncated, info
