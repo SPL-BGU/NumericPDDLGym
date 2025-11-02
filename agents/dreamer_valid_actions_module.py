@@ -1,117 +1,113 @@
-from typing import Dict, Optional
+"""RLlib DreamerV3 Torch module with support for action masking."""
 
+from typing import Any, Dict, Tuple
+
+import gymnasium as gym
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from ray.rllib.algorithms.dreamerv3.torch.dreamerv3_torch_rl_module import DreamerV3TorchRLModule
-from ray.rllib.policy.sample_batch import SampleBatch
+
+from ray.rllib.algorithms.dreamerv3.torch.dreamerv3_torch_rl_module import (
+    DreamerV3TorchRLModule,
+)
+from ray.rllib.core.columns import Columns
 from ray.rllib.utils.annotations import override
-from ray.rllib.utils.typing import TensorType
+from ray.rllib.utils.torch_utils import FLOAT_MIN
 
 
-# ---------- Utilities ----------
+class ActionMaskingDreamerV3TorchRLModule(DreamerV3TorchRLModule):
+    """DreamerV3 Torch RLModule that honours action masks from the environment."""
 
-def apply_action_mask_to_logits(logits: torch.Tensor, mask: torch.Tensor, eps: float = 1e-45) -> torch.Tensor:
-    """Add log(mask) to logits so invalid actions become -inf."""
-    mask = mask.clamp_min(eps)
-    return logits + mask.log()
-
-
-# ---------- Masked Dreamer RLModule ----------
-# We extend RLlib's DreamerV3 Torch module by adding:
-#   1) a small mask head g(h) -> logits over actions
-#   2) BCE loss on real sequences vs. env-provided masks
-#   3) masking the actor's logits both in REAL and IMAGINATION passes
-
-
-class MaskedDreamerV3TorchRLModule(DreamerV3TorchRLModule):
-    """DreamerV3 module with state-dependent action masking."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        A = self.action_dist_class.param_shape()[0]  # number of actions (Categorical(A))
-        # The actor reads a latent "h" (RSSM deterministic state). Get its size from actor MLP input.
-        # Actor is an nn.Sequential; first Linear gives us the in_features:
-        first_linear: nn.Linear = None
-        for m in self.actor.net.modules():
-            if isinstance(m, nn.Linear):
-                first_linear = m
-                break
-
-        latent_dim = first_linear.in_features if first_linear is not None else self.config_model.get("rssm_hidden_dim",
-                                                                                                     1024)
-
-        self.mask_head = nn.Sequential(
-            nn.LayerNorm(latent_dim),
-            nn.Linear(latent_dim, 256), nn.ELU(),
-            nn.Linear(256, A),  # mask logits
+    @override(DreamerV3TorchRLModule)
+    def _forward_inference(
+        self, batch: Dict[str, Any], **kwargs: Any
+    ) -> Dict[str, Any]:
+        action_mask, batch = self._preprocess_batch(batch)
+        actions, next_state = self._masked_actor_step(
+            batch=batch,
+            action_mask=action_mask,
+            deterministic=True,
         )
-
-    # ---- Helpers to get masks in both paths ----
-    def _predict_mask_probs(self, h: torch.Tensor) -> torch.Tensor:
-        """Predict mask probabilities from latent h (used in imagination)."""
-        return torch.sigmoid(self.mask_head(h))
-
-    # ---- Actor calls (REAL + IMAG) ----
-    @override(DreamerV3TorchRLModule)
-    def _actor_forward_real(
-            self,
-            h: TensorType,
-            obs: Dict[str, TensorType],
-            is_exploring: bool,
-            **kwargs
-    ) -> Dict[str, TensorType]:
-        """Actor on REAL data: mask comes from env."""
-        out = super()._actor_forward_real(h, obs, is_exploring, **kwargs)
-
-        # out contains "logits" for the Categorical policy (discrete).
-        if "action_mask" in obs:
-            mask = obs["action_mask"].float()
-            out["logits"] = apply_action_mask_to_logits(out["logits"], mask)
-
-        return out
+        return self._forward_inference_or_exploration_helper(batch, actions, next_state)
 
     @override(DreamerV3TorchRLModule)
-    def _actor_forward_imagination(
-            self,
-            h: TensorType,
-            is_exploring: bool,
-            **kwargs
-    ) -> Dict[str, TensorType]:
-        """Actor during imagination: mask is predicted from h."""
-        out = super()._actor_forward_imagination(h, is_exploring, **kwargs)
+    def _forward_exploration(
+        self, batch: Dict[str, Any], **kwargs: Any
+    ) -> Dict[str, Any]:
+        action_mask, batch = self._preprocess_batch(batch)
+        actions, next_state = self._masked_actor_step(
+            batch=batch,
+            action_mask=action_mask,
+            deterministic=False,
+        )
+        return self._forward_inference_or_exploration_helper(batch, actions, next_state)
 
-        # Predict mask from latent state and apply a straight-through hardening.
-        p = self._predict_mask_probs(h)  # [B, A]
-        hard = (p > 0.5).float()
-        mask = hard.detach() + (p - p.detach())  # straight-through estimator
-        out["logits"] = apply_action_mask_to_logits(out["logits"], mask)
-
-        # Expose mask probs for logging/diagnostics.
-        out["mask_probs"] = p
-        return out
-
-    # ---- Loss: add BCE mask loss on REAL batches ----
     @override(DreamerV3TorchRLModule)
-    def loss(self, batch: SampleBatch) -> Dict[str, TensorType]:
-        losses = super().loss(batch)
+    def _forward_train(self, batch: Dict[str, Any], **kwargs: Any):
+        # Remove the action mask from the batch before calling Dreamer's training
+        # routine. Only the raw observation is expected by the default implementation.
+        _, batch = self._preprocess_batch(batch)
+        return super()._forward_train(batch, **kwargs)
 
-        # Only compute mask loss on REAL sequences (not imagined).
-        # RLlib Dreamer puts real data into "model_inputs" (encoder/RSSM posterior) and imagined into rollout path.
-        if isinstance(batch.get("obs"), dict) and "action_mask" in batch["obs"]:
-            # We need the corresponding latent h used by the actor on real data.
-            # RLlib stores deterministic RSSM states under key "h" (as produced in _encoder/_rssm).
-            h_real: Optional[torch.Tensor] = batch.get("h")
-            if h_real is not None:
-                mask_logits = self.mask_head(h_real)  # [B, A]
-                target_mask = batch["obs"]["action_mask"].float()  # [B, A]
-                # Balance the BCE because illegal actions may be sparse.
-                pos_weight = None
-                if "mask_pos_weight" in self.config_model:
-                    pos_weight = torch.tensor(self.config_model["mask_pos_weight"], device=mask_logits.device)
-                loss_mask = F.binary_cross_entropy_with_logits(mask_logits, target_mask, pos_weight=pos_weight)
-                losses["loss_mask"] = loss_mask
-                losses["total_loss"] = losses["total_loss"] + loss_mask
+    def _preprocess_batch(
+        self, batch: Dict[str, Any]
+    ) -> Tuple[torch.Tensor | None, Dict[str, Any]]:
+        """Extract the action mask from the observation dict, if present."""
 
-        return losses
+        observations = batch[Columns.OBS]
+        if isinstance(observations, dict):
+            action_mask = observations.pop("action_mask")
+            batch[Columns.OBS] = observations.pop("observations")
+            return action_mask, batch
+        return None, batch
+
+    def _masked_actor_step(
+        self,
+        *,
+        batch: Dict[str, Any],
+        action_mask: torch.Tensor | None,
+        deterministic: bool,
+    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        """Run the Dreamer actor while respecting the provided action mask."""
+
+        with torch.no_grad():
+            states = self.dreamer_model.world_model.forward_inference(
+                observations=batch[Columns.OBS],
+                previous_states=batch[Columns.STATE_IN],
+                is_first=batch["is_first"],
+            )
+
+            actions, distr_params = self.dreamer_model.actor(
+                h=states["h"],
+                z=states["z"],
+                return_distr_params=True,
+            )
+
+            if (
+                action_mask is not None
+                and isinstance(self.action_space, gym.spaces.Discrete)
+            ):
+                masked_params = self._apply_action_mask(
+                    distr_params=distr_params,
+                    action_mask=action_mask,
+                )
+                distr = self.dreamer_model.actor.get_action_dist_object(masked_params)
+                actions = distr.mode if deterministic else distr.sample()
+            else:
+                distr = self.dreamer_model.actor.get_action_dist_object(distr_params)
+                actions = distr.mode if deterministic else actions
+
+            next_state = {"h": states["h"], "z": states["z"], "a": actions}
+
+        return actions, next_state
+
+    def _apply_action_mask(
+        self, *, distr_params: torch.Tensor, action_mask: torch.Tensor
+    ) -> torch.Tensor:
+        """Mask invalid actions by setting their logits to negative infinity."""
+
+        # Align the mask with the distribution parameters (BxT flattened).
+        mask = action_mask.reshape(-1, action_mask.shape[-1]).to(distr_params.device)
+        mask = mask.to(distr_params.dtype)
+
+        inf_mask = torch.clamp(torch.log(mask), min=FLOAT_MIN)
+        return distr_params + inf_mask
+
