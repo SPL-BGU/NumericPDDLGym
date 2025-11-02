@@ -67,8 +67,8 @@ class LogAlgorithmActions(RLlibCallback):
             )
 
         # Save the trace to a and collect statistics about the learning.
-        # traces_dir = Path(OUTPUT_DIRECTORY_PATH) / "traces"
-        # traces_dir.mkdir(exist_ok=True)
-        # with open(traces_dir / f"trace_{problem_name}_{episode.id_}.txt", "w") as trace_file:
-        #     for action in actions:
-        #         trace_file.write(action + "\n")
+        traces_dir = Path(OUTPUT_DIRECTORY_PATH) / "traces"
+        traces_dir.mkdir(exist_ok=True)
+        with open(traces_dir / f"trace_{problem_name}_{episode.id_}.txt", "w") as trace_file:
+            for action in actions:
+                trace_file.write(action + "\n")
