@@ -33,7 +33,7 @@ def train_agent(domain_path: Path, problems_folder_path: Path, problem_prefix: s
             kl_coeff=0.2,
         )
         .resources(num_gpus=0)
-        .env_runners(num_env_runners=0)
+        .env_runners(num_env_runners=0, batch_mode="complete_episodes")
         .rl_module(
             # We need to explicitly specify here RLModule to use and
             # the catalog needed to build it.

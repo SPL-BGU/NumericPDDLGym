@@ -48,7 +48,7 @@ def train_agent(
             horizon_H=horizon_h,
         )
         .resources(num_gpus=0)
-        .env_runners(num_env_runners=0)
+        .env_runners(num_env_runners=0, batch_mode="complete_episodes")
         .rl_module(
             rl_module_spec=RLModuleSpec(
                 module_class=ActionMaskingDreamerV3TorchRLModule,
