@@ -13,7 +13,7 @@ class PDDLMaskedEnv(PDDLEnv):
     def __init__(self, config):
         super().__init__(config)
         self.state_dependant_action_mask = {}
-        self.reset_action_mask_between_problems = config.get("reset_action_mask_between_problems", False)
+        self.reset_action_mask_between_problems = config.get("reset_action_mask_between_problems", True)
         self.observation_space = Dict(
             {
                 "action_mask": Box(low=0, high=1, shape=(self.action_space.n,), dtype=np.float32),

@@ -35,6 +35,7 @@ class PDDLEnv(gym.Env):
         self.current_problem = ProblemParser(problem_path=config["problems_list"][0],
                                              domain=self.domain).parse_problem()
         self.problem_paths_list: List[Path] = config.get("problems_list", [])
+        self._last_path = self.problem_paths_list[-1] if self.problem_paths_list else None
         self._problem_name = config["problems_list"][0].stem
         self._domain_name = config["domain_path"].stem
         self._executing_algorithm = config.get("executing_algorithm", "Unknown")
@@ -157,7 +158,8 @@ class PDDLEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        self._load_problem(self.problem_paths_list.pop(0))
+        problem_to_use = self._last_path if len(self.problem_paths_list) == 0 else self.problem_paths_list.pop(0)
+        self._load_problem(problem_to_use)
         self.state = State(predicates=self.current_problem.initial_state_predicates,
                            fluents=self.current_problem.initial_state_fluents,
                            is_init=True)
@@ -186,6 +188,7 @@ class PDDLEnv(gym.Env):
             called_inapplicable_action = True
 
         previous_state = self.state.copy()
+        new_state.is_init = False
         self.state = new_state
         self.env_state = self._state_to_observation(self.state)
         self.steps += 1

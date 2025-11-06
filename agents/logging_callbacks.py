@@ -34,13 +34,13 @@ class LogAlgorithmActions(RLlibCallback):
         problem_name = episode.infos.data[1]["problem_name"]
         domain_name = episode.infos.data[1]["domain_name"]
         executing_algorithm = episode.infos.data[1]["executing_algorithm"]
-        average_reward = sum(episode.rewards) / len(episode.rewards)
+        average_reward = episode.rewards[-1]
         total_executed_actions = 0
         num_failed_actions = 0
         num_grounded_actions = 0
         actions: List[str] = []
         previous_states = []
-        last_state = None
+        transition_statuses = []
         for step in episode.infos.data[1:]:
             total_executed_actions += 1
             actions.append(step["executed_action"])
@@ -48,6 +48,8 @@ class LogAlgorithmActions(RLlibCallback):
             num_grounded_actions = step["num_grounded_actions"]
             if step["is_inapplicable"]:
                 num_failed_actions += 1
+
+            transition_statuses.append(f"(:transition_status ({'success' if not step['is_inapplicable'] else 'failure'}))")
 
         last_state = episode.infos.data[-1]["next_state"]
 
@@ -75,8 +77,10 @@ class LogAlgorithmActions(RLlibCallback):
         traces_dir = Path(OUTPUT_DIRECTORY_PATH) / "traces"
         traces_dir.mkdir(exist_ok=True)
         with open(traces_dir / f"trace_{problem_name}_{episode.id_}.trajectory", "w") as trace_file:
-            for pre_state, action in zip(previous_states, actions):
+            trace_file.write("(")
+            for pre_state, action, transition_stat in zip(previous_states, actions, transition_statuses):
                 trace_file.write(pre_state)
-                trace_file.write(action + "\n")
+                trace_file.write(f"(operator: {action})\n")
+                trace_file.write(transition_stat)
 
-            trace_file.write(last_state + "\n")
+            trace_file.write(last_state + ")")
