@@ -87,6 +87,12 @@ def parse_arguments():
         help="The training batch size.",
         required=False,
     )
+    parser.add_argument(
+        "--max_steps",
+        type=int,
+        default=1000,
+        help="Maximum number of steps per episode.",
+        required=False)
     return parser.parse_args()
 
 
@@ -98,4 +104,5 @@ if __name__ == '__main__':
         problems_folder_path=Path(args.problems_folder_path),
         problem_prefix=args.problems_prefix,
         batch_size=args.batch_size,
+        max_steps=args.max_steps,
     )

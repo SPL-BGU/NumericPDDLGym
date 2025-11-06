@@ -159,7 +159,8 @@ class PDDLEnv(gym.Env):
         super().reset(seed=seed)
         self._load_problem(self.problem_paths_list.pop(0))
         self.state = State(predicates=self.current_problem.initial_state_predicates,
-                           fluents=self.current_problem.initial_state_fluents)
+                           fluents=self.current_problem.initial_state_fluents,
+                           is_init=True)
         self.env_state = self._state_to_observation(self.state)
 
         self.steps = 0
@@ -184,6 +185,7 @@ class PDDLEnv(gym.Env):
             self.logger.debug(f"Could not apply the action {str(operator)} to the state.")
             called_inapplicable_action = True
 
+        previous_state = self.state.copy()
         self.state = new_state
         self.env_state = self._state_to_observation(self.state)
         self.steps += 1
@@ -194,6 +196,8 @@ class PDDLEnv(gym.Env):
         info = {
             "is_inapplicable": called_inapplicable_action,
             "executed_action": str(self.last_action),
+            "previous_state": previous_state.serialize(),
+            "next_state": new_state.serialize(),
             "problem_name": self._problem_name,
             "domain_name": self._domain_name,
             "num_grounded_actions": len(self.grounded_actions),

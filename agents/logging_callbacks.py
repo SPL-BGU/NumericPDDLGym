@@ -39,12 +39,17 @@ class LogAlgorithmActions(RLlibCallback):
         num_failed_actions = 0
         num_grounded_actions = 0
         actions: List[str] = []
+        previous_states = []
+        last_state = None
         for step in episode.infos.data[1:]:
             total_executed_actions += 1
             actions.append(step["executed_action"])
+            previous_states.append(step["previous_state"])
             num_grounded_actions = step["num_grounded_actions"]
             if step["is_inapplicable"]:
                 num_failed_actions += 1
+
+        last_state = episode.infos.data[-1]["next_state"]
 
         num_successful_actions = total_executed_actions - num_failed_actions
         with open(Path(OUTPUT_DIRECTORY_PATH) / "episode_summary.csv", "a", newline="") as summary_csv:
@@ -69,6 +74,9 @@ class LogAlgorithmActions(RLlibCallback):
         # Save the trace to a and collect statistics about the learning.
         traces_dir = Path(OUTPUT_DIRECTORY_PATH) / "traces"
         traces_dir.mkdir(exist_ok=True)
-        with open(traces_dir / f"trace_{problem_name}_{episode.id_}.txt", "w") as trace_file:
-            for action in actions:
+        with open(traces_dir / f"trace_{problem_name}_{episode.id_}.trajectory", "w") as trace_file:
+            for pre_state, action in zip(previous_states, actions):
+                trace_file.write(pre_state)
                 trace_file.write(action + "\n")
+
+            trace_file.write(last_state + "\n")
