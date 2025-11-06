@@ -32,9 +32,6 @@ class LogAlgorithmActions(RLlibCallback):
         # Getting statistics about the episode.
         print("Episode ended. Collecting statistics and outputting the results...")
         problem_name = episode.infos.data[1]["problem_name"]
-        domain_name = episode.infos.data[1]["domain_name"]
-        executing_algorithm = episode.infos.data[1]["executing_algorithm"]
-        average_reward = episode.rewards[-1]
         total_executed_actions = 0
         num_failed_actions = 0
         num_grounded_actions = 0
@@ -61,12 +58,12 @@ class LogAlgorithmActions(RLlibCallback):
 
             csv_writer.writerow(
                 {
-                    "executing_algorithm": executing_algorithm,
-                    "domain_name": domain_name,
+                    "executing_algorithm": episode.infos.data[1]["executing_algorithm"],
+                    "domain_name": episode.infos.data[1]["domain_name"],
                     "trained_instance": problem_name,
                     "episode_id": episode.id_,
                     "episode_length": len(actions),
-                    "average_reward": f"{average_reward:.2f}",
+                    "average_reward": f"{episode.rewards[-1]:.2f}",
                     "num_successful_actions": num_successful_actions,
                     "num_failed_actions": num_failed_actions,
                     "action_space_size": num_grounded_actions,
