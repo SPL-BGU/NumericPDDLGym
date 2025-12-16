@@ -1,7 +1,9 @@
 from typing import Dict, Optional, Tuple, Union
 
 import gymnasium as gym
-from ray.rllib.algorithms.ppo.torch.default_ppo_torch_rl_module import DefaultPPOTorchRLModule
+from ray.rllib.algorithms.ppo.torch.default_ppo_torch_rl_module import (
+    DefaultPPOTorchRLModule,
+)
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.apis.value_function_api import ValueFunctionAPI
 from ray.rllib.core.rl_module.default_model_config import DefaultModelConfig
@@ -23,15 +25,15 @@ class ActionMaskingRLModule(RLModule):
 
     @override(RLModule)
     def __init__(
-            self,
-            *,
-            observation_space: Optional[gym.Space] = None,
-            action_space: Optional[gym.Space] = None,
-            inference_only: Optional[bool] = None,
-            learner_only: bool = False,
-            model_config: Optional[Union[dict, DefaultModelConfig]] = None,
-            catalog_class=None,
-            **kwargs,
+        self,
+        *,
+        observation_space: Optional[gym.Space] = None,
+        action_space: Optional[gym.Space] = None,
+        inference_only: Optional[bool] = None,
+        learner_only: bool = False,
+        model_config: Optional[Union[dict, DefaultModelConfig]] = None,
+        catalog_class=None,
+        **kwargs,
     ):
         # While the environment holds an observation space that contains, both,
         # the action mask and the original observation space, the 'RLModule'
@@ -68,7 +70,7 @@ class ActionMaskingTorchRLModule(ActionMaskingRLModule, DefaultPPOTorchRLModule)
 
     @override(DefaultPPOTorchRLModule)
     def _forward_inference(
-            self, batch: Dict[str, TensorType], **kwargs
+        self, batch: Dict[str, TensorType], **kwargs
     ) -> Dict[str, TensorType]:
         # Preprocess the original batch to extract the action mask.
         action_mask, batch = self._preprocess_batch(batch)
@@ -79,7 +81,7 @@ class ActionMaskingTorchRLModule(ActionMaskingRLModule, DefaultPPOTorchRLModule)
 
     @override(DefaultPPOTorchRLModule)
     def _forward_exploration(
-            self, batch: Dict[str, TensorType], **kwargs
+        self, batch: Dict[str, TensorType], **kwargs
     ) -> Dict[str, TensorType]:
         # Preprocess the original batch to extract the action mask.
         action_mask, batch = self._preprocess_batch(batch)
@@ -90,7 +92,7 @@ class ActionMaskingTorchRLModule(ActionMaskingRLModule, DefaultPPOTorchRLModule)
 
     @override(DefaultPPOTorchRLModule)
     def _forward_train(
-            self, batch: Dict[str, TensorType], **kwargs
+        self, batch: Dict[str, TensorType], **kwargs
     ) -> Dict[str, TensorType]:
         # Run the forward pass.
         outs = super()._forward_train(batch, **kwargs)
@@ -110,7 +112,7 @@ class ActionMaskingTorchRLModule(ActionMaskingRLModule, DefaultPPOTorchRLModule)
         return super().compute_values(batch, embeddings)
 
     def _preprocess_batch(
-            self, batch: Dict[str, TensorType], **kwargs
+        self, batch: Dict[str, TensorType], **kwargs
     ) -> Tuple[TensorType, Dict[str, TensorType]]:
         """Extracts observations and action mask from the batch
 
@@ -133,7 +135,7 @@ class ActionMaskingTorchRLModule(ActionMaskingRLModule, DefaultPPOTorchRLModule)
         return action_mask, batch
 
     def _mask_action_logits(
-            self, batch: Dict[str, TensorType], action_mask: TensorType
+        self, batch: Dict[str, TensorType], action_mask: TensorType
     ) -> Dict[str, TensorType]:
         """Masks the action logits for the output of `forward` methods
 
@@ -150,6 +152,7 @@ class ActionMaskingTorchRLModule(ActionMaskingRLModule, DefaultPPOTorchRLModule)
         inf_mask = torch.clamp(torch.log(action_mask), min=FLOAT_MIN)
 
         # Mask the logits.
+        batch["unmasked_logits"] = batch[Columns.ACTION_DIST_INPUTS].clone()
         batch[Columns.ACTION_DIST_INPUTS] += inf_mask
 
         # Return the batch with the masked action logits.

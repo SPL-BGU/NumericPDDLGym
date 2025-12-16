@@ -15,14 +15,14 @@ from gym_environments.pddl_masked_environment import PDDLMaskedEnv
 
 
 def train_agent(
-        domain_path: Path,
-        problems_folder_path: Path,
-        problem_prefix: str,
-        max_steps: int = 1000,
-        training_ratio: int = 1024,
-        batch_size_b: int = 16,
-        batch_length_t: int = 64,
-        horizon_h: int = 15,
+    domain_path: Path,
+    problems_folder_path: Path,
+    problem_prefix: str,
+    max_steps: int = 1000,
+    training_ratio: int = 1024,
+    batch_size_b: int = 16,
+    batch_length_t: int = 64,
+    horizon_h: int = 15,
 ) -> None:
     """Train a DreamerV3 agent on the provided PDDL planning problems."""
 
@@ -65,7 +65,9 @@ def train_agent(
     for problem_path in problem_paths:
         print(f"Training DreamerV3 algorithm on the problem file: {problem_path}")
         result = algo.train()
-        print(f"[{problem_path.stem}] reward={result['env_runners'].get('episode_return_mean', 0)}")
+        print(
+            f"[{problem_path.stem}] reward={result['env_runners'].get('episode_return_mean', 0)}"
+        )
 
 
 def parse_arguments():
@@ -124,6 +126,7 @@ def parse_arguments():
 
 
 if __name__ == "__main__":
+    # This code is experimental and has not been fully tested
     args = parse_arguments()
     logging.basicConfig(level=logging.INFO)
     train_agent(
