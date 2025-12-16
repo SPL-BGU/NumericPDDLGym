@@ -1,0 +1,14 @@
+(define (problem instance_46)
+	(:domain PolyCraft)
+	(:objects
+		cell0 cell1 cell2 cell3 cell4 cell5 cell6 cell7 cell8 cell9 cell10 cell11 cell12 cell13 cell14 cell15 cell16 cell17 cell18 cell19 cell20 cell21 cell22 cell23 cell24 cell25 cell26 cell27 cell28 cell29 cell30 cell31 cell32 cell33 cell34 cell35 cell36 cell37 cell38 cell39 cell40 cell41 cell42 cell43 cell44 cell45 cell46 cell47 cell48 cell49 cell50 cell51 cell52 cell53 cell54 cell55 cell56 cell57 cell58 cell59 cell60 cell61 cell62 cell64 cell65 cell66 cell67 cell68 cell69 cell70 cell71 cell72 cell73 cell74 cell75 cell76 cell77 cell78 cell79 cell80 cell81 cell82 cell83 cell84 cell85 cell86 cell87 cell88 cell89 cell90 cell91 cell92 cell93 cell94 cell95 cell96 cell97 cell98 cell99 - cell
+	)
+	(:init (position cell14) (air_cell cell0) (air_cell cell1) (air_cell cell2) (air_cell cell3) (air_cell cell4) (air_cell cell5) (air_cell cell6) (air_cell cell7) (air_cell cell8) (air_cell cell9) (air_cell cell10) (air_cell cell14) (air_cell cell15) (air_cell cell17) (air_cell cell18) (air_cell cell19) (air_cell cell20) (air_cell cell21) (air_cell cell22) (air_cell cell23) (air_cell cell26) (air_cell cell27) (air_cell cell28) (air_cell cell29) (air_cell cell30) (air_cell cell31) (air_cell cell32) (air_cell cell33) (air_cell cell34) (air_cell cell35) (air_cell cell36) (air_cell cell39) (air_cell cell40) (air_cell cell42) (air_cell cell43) (air_cell cell44) (air_cell cell45) (air_cell cell47) (air_cell cell48) (air_cell cell49) (air_cell cell50) (air_cell cell51) (air_cell cell52) (air_cell cell53) (air_cell cell54) (air_cell cell55) (air_cell cell56) (air_cell cell57) (air_cell cell58) (air_cell cell59) (air_cell cell60) (air_cell cell61) (air_cell cell62) (air_cell cell65) (air_cell cell66) (air_cell cell69) (air_cell cell70) (air_cell cell73) (air_cell cell74) (air_cell cell77) (air_cell cell78) (air_cell cell79) (air_cell cell80) (air_cell cell81) (air_cell cell82) (air_cell cell83) (air_cell cell84) (air_cell cell85) (air_cell cell86) (air_cell cell87) (air_cell cell88) (air_cell cell89) (air_cell cell90) (air_cell cell91) (air_cell cell92) (air_cell cell93) (air_cell cell94) (air_cell cell95) (air_cell cell96) (air_cell cell97) (air_cell cell98) (air_cell cell99) (tree_cell cell41) (tree_cell cell25) (tree_cell cell68) (tree_cell cell13) (tree_cell cell12) (tree_cell cell37) (tree_cell cell24) (tree_cell cell75) (tree_cell cell16) (tree_cell cell76) (tree_cell cell38) (tree_cell cell46) (tree_cell cell64) (tree_cell cell72) (tree_cell cell71) (tree_cell cell11) (tree_cell cell67)
+		(crafting_table_cell crafting_table) (= (count_log_in_inventory) 8) (= (count_planks_in_inventory) 3) (= (count_stick_in_inventory) 0)
+	)
+	(:goal
+		(and
+			(have_wooden_sword)
+		)
+	)
+)
