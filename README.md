@@ -10,7 +10,7 @@ This allows Numeric PDDL planning problems to be solved using standard RL algori
 The environment converts states, actions, and goals from Numeric PDDL into fixed-size numeric vectors, enabling direct integration with deep RL libraries.
 
 
-## Features
+## ✨ Features
 
 - Supports **Numeric PDDL domains and problems**
 - Automatic grounding and vectorization of:
@@ -21,7 +21,18 @@ The environment converts states, actions, and goals from Numeric PDDL into fixed
 - Designed for **[RLlib (Ray)](https://docs.ray.io/en/latest/rllib/index.html)** integration
 - Works with standard deep RL algorithms (e.g., PPO)
 
-# Usage
+## ⚙️ Configuration
+
+The environment is configured via a dictionary (`env_config`).
+
+| Parameter | Type | Description |
+|----------|------|------------|
+| `domain_path` | `Path` | Path to the PDDL domain file |
+| `problems_list` | `List[Path]` | List of problem files |
+| `max_steps` | `int` | Max steps per episode |
+| `executing_algorithm` | `str` | Name of RL algorithm (e.g., `"PPO"`) |
+| `masking_strategy` | `"pre"` or `"post"` | `"pre"`: Filters invalid actions before execution using PDDL checks.<br>`"post"`: Learns invalid actions after execution from feedback. |
+| `map_size` | `int` | (MinecraftEnv only) Grid size, e.g., 6, 10, 15. |
 
 ## 🚀 Installation
 
@@ -35,13 +46,13 @@ With RL (RLlib + Torch):
 pip install numeric_pddl_gym[rl_agents]
 ```
 
-## Run Example
+## ▶️ Run Example
 
 ```
 python rl_agents/ppo_pddl_rllib_agent.py
 ```
 
-# Limitations
+## ⚠️ Limitations
 
 1. Can't encode complex goal conditions.
 2. Agents must be retrained if the problem has a different number of fluents, predicates, or goal conditions.
@@ -50,6 +61,6 @@ python rl_agents/ppo_pddl_rllib_agent.py
 5. Enabling action applicability checking leads to slow runtime in large-scale problems.
 
 
-# Citations
+## 📚 Citations
 
 Coming soon
