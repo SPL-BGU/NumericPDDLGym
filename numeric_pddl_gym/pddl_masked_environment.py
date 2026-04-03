@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from gymnasium.spaces import Dict, Box
 
-from gym_environments.pddl_environment import PDDLEnv
+from .pddl_environment import PDDLEnv
 
 
 class PDDLMaskedEnv(PDDLEnv):
@@ -13,9 +13,7 @@ class PDDLMaskedEnv(PDDLEnv):
     def __init__(self, config):
         super().__init__(config)
         self.state_dependant_action_mask = {}
-        self.reset_action_mask_between_problems = config.get(
-            "reset_action_mask_between_problems", True
-        )
+        self.reset_action_mask_between_problems = len(config["problems_list"]) != 1
         self.observation_space = Dict(
             {
                 "action_mask": Box(

@@ -3,12 +3,10 @@ from typing import Dict, Any, override
 
 import numpy as np
 from gymnasium import spaces
-
-
 from gymnasium.spaces import Box
 
 
-from gym_environments.pddl_masked_environment import PDDLMaskedEnv
+from .pddl_masked_environment import PDDLMaskedEnv
 
 
 class MinecraftEnv(PDDLMaskedEnv):

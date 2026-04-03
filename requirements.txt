@@ -1,11 +1,10 @@
 gymnasium~=1.2.1
-pddl-plus-parser==3.16.0
-ray==2.50.1
+pddl-plus-parser==3.17.0
 sympy==1.14.0
 anytree==2.13.0
 networkx==3.5
-numpy==2.3.4
-pillow==11.3.0
 dm-tree==0.1.9
 scipy==1.16.3
+ray==2.50.1
 torch==2.9.0
+lz4==4.4.5

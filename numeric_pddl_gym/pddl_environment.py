@@ -19,7 +19,7 @@ from pddl_plus_parser.models import (
     Problem,
 )
 
-from gym_environments.misc import (
+from .misc import (
     get_grounded_predicates_space_size,
     get_actions_space_size,
 )
@@ -267,7 +267,12 @@ class PDDLEnv(gym.Env):
         return self.env_state, {}
 
     def get_action_from_rl(self, rl_action):
+        """Converts the action received from the RL agent (as an index) to the corresponding grounded action in the PDDL domain."""
         return self.grounded_actions[rl_action]
+
+    def get_pddl_state(self):
+        """Returns the current state in a format that can be easily parsed and used by PDDL-based algorithms."""
+        return self.state.serialize()
 
     def step(self, action_id: int):
         # convert action_id to ActionCall

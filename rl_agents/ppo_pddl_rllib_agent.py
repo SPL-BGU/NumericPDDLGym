@@ -8,10 +8,10 @@ from ray.rllib.core.rl_module import RLModuleSpec
 import sys
 
 sys.path.append(".")
-from agents.logging_callbacks import LogAlgorithmActions
-from gym_environments.pddl_masked_environment import PDDLMaskedEnv
-from gym_environments.minecraft_environment import MinecraftEnv
-from agents.ppo_valid_actions_module import ActionMaskingTorchRLModule
+from rl_agents.logging_callbacks import LogAlgorithmActions
+from numeric_pddl_gym.pddl_masked_environment import PDDLMaskedEnv
+from numeric_pddl_gym.minecraft_environment import MinecraftEnv
+from rl_agents.ppo_valid_actions_module import ActionMaskingTorchRLModule
 
 import os, random, numpy as np, torch
 
@@ -26,6 +26,7 @@ def train_agent(
     max_steps: int = 1500,
     batch_size: int = 1500,
     size: str = "small",
+    seed: int = 63,
 ):
     instances = 50
     episodes = 1000
@@ -94,10 +95,11 @@ def train_agent(
             callbacks_class=LogAlgorithmActions,
         )
     )
-    config.seed = SEED
+    config.seed = seed
     algo = config.build_algo()
 
     checkpoints_path = os.environ.get("OUTPUT_DIRECTORY_PATH", "results_directory")
+    os.makedirs(checkpoints_path, exist_ok=True)
     loss_log_path = os.path.join(checkpoints_path, "loss_log.txt")
     t1 = time.time()
     for index in tqdm(range(1, episodes + 1)):
@@ -184,4 +186,5 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         max_steps=args.max_steps,
         size=args.size,
+        seed=SEED,
     )

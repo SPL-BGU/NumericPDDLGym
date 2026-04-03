@@ -26,7 +26,7 @@ The environment converts states, actions, and goals from Numeric PDDL into fixed
 ## How to Run Your First Agent
 
 ```
-pyton agents/ppo_pddl_rllib_agent.py
+pyton rl_agents/ppo_pddl_rllib_agent.py
 ```
 
 # Limitations
