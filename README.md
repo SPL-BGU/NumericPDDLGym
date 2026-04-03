@@ -23,10 +23,22 @@ The environment converts states, actions, and goals from Numeric PDDL into fixed
 
 # Usage
 
-## How to Run Your First Agent
+## 🚀 Installation
 
 ```
-pyton rl_agents/ppo_pddl_rllib_agent.py
+pip install numeric_pddl_gym
+```
+
+With RL (RLlib + Torch):
+
+```
+pip install numeric_pddl_gym[rl_agents]
+```
+
+## Run Example
+
+```
+python rl_agents/ppo_pddl_rllib_agent.py
 ```
 
 # Limitations
