@@ -4,14 +4,24 @@ from pathlib import Path
 import numpy as np
 from gymnasium.spaces import Dict, Box
 
+from pddl_plus_parser.models import Operator
 from .pddl_environment import PDDLEnv
 
 
 class PDDLMaskedEnv(PDDLEnv):
-    """PDDL environment with action masking support."""
+    """PDDL environment with configurable action masking support.
+
+    masking_strategy:
+        - "post": learn invalid actions after execution (reactive)
+        - "pre": compute valid actions before execution (proactive)
+    """
 
     def __init__(self, config):
         super().__init__(config)
+
+        # Strategy selection
+        self.masking_strategy = config.get("masking_strategy", "post")
+
         self.state_dependant_action_mask = {}
         self.reset_action_mask_between_problems = len(config["problems_list"]) != 1
         self.observation_space = Dict(
@@ -23,63 +33,99 @@ class PDDLMaskedEnv(PDDLEnv):
             }
         )
 
-    def _update_mask(
-        self, state: np.ndarray, action_index: int, is_inapplicable: bool
-    ) -> None:
-        """Update the action mask for a given state and action.
+    def _update_mask(self, observation, action_index=None, is_inapplicable=None):
+        """Update mask based on selected strategy."""
+        state_key = str(observation)
 
-        :param state: the state which the action was taken on.
-        :param action_index: the index of the action taken.
-        :param is_inapplicable: whether the action was inapplicable in the given state.
-        """
-        state_str = str(state)
-        if state_str not in self.state_dependant_action_mask:
-            self.state_dependant_action_mask[state_str] = np.ones(
-                (self.action_space.n,), dtype=np.float32
+        # Avoid recomputing for pre strategy
+        if (
+            self.masking_strategy == "pre"
+            and state_key in self.state_dependant_action_mask
+        ):
+            return
+
+        # ---------- PRE-ACTION MASKING ----------
+        if self.masking_strategy == "pre":
+            applicable_actions = []
+
+            for operator in self.grounded_actions:
+                op = Operator(
+                    action=self.domain.actions[operator.name],
+                    domain=self.domain,
+                    grounded_action_call=operator.parameters,
+                    problem_objects=self.current_problem.objects,
+                )
+                applicable_actions.append(op.is_applicable(self.state))
+
+            self.state_dependant_action_mask[state_key] = np.array(
+                applicable_actions, dtype=np.float32
             )
 
-        self.state_dependant_action_mask[state_str][action_index] = (
-            0.0 if is_inapplicable else 1.0
-        )
+        # ---------- POST-ACTION MASKING ----------
+        elif self.masking_strategy == "post":
+            if state_key not in self.state_dependant_action_mask:
+                self.state_dependant_action_mask[state_key] = np.ones(
+                    (self.action_space.n,), dtype=np.float32
+                )
+
+            if action_index is not None:
+                self.state_dependant_action_mask[state_key][action_index] = (
+                    0.0 if is_inapplicable else 1.0
+                )
 
     def _load_problem(self, problem_path: Path) -> None:
         """Load a PDDL problem from its path."""
         super()._load_problem(problem_path)
+
         if self.reset_action_mask_between_problems:
-            self.state_dependant_action_mask = defaultdict(dict)
+            self.state_dependant_action_mask = {}
 
     def step(self, action_index: int):
         prev_state = self.env_state.copy()
+
         observation, reward, done, truncated, info = super().step(action_index)
-        self._update_mask(
-            state=prev_state,
-            action_index=action_index,
-            is_inapplicable=info["is_inapplicable"],
-        )
-        new_state_mask = (
-            np.ones((self.action_space.n,), dtype=np.float32)
-            if str(observation) not in self.state_dependant_action_mask
-            else self.state_dependant_action_mask[str(observation)]
+
+        if self.masking_strategy == "post":
+            self._update_mask(
+                prev_state,
+                action_index=action_index,
+                is_inapplicable=info.get("is_inapplicable", False),
+            )
+
+        elif self.masking_strategy == "pre":
+            self._update_mask(observation)
+
+        mask = self.state_dependant_action_mask.get(
+            str(observation),
+            np.ones((self.action_space.n,), dtype=np.float32),
         )
 
         masked_observation = {
-            "action_mask": new_state_mask,
+            "action_mask": mask,
             "observations": observation,
         }
+
         return masked_observation, reward, done, truncated, info
 
     def reset(self, seed=None, options=None):
         self.logger.info("Called reset! Initializing environment...")
+
         observation, info = super().reset(seed=seed, options=options)
+
         if self.reset_action_mask_between_problems:
             self.state_dependant_action_mask = {}
 
-        state_mask = self.state_dependant_action_mask.get(
-            str(observation), np.ones((self.action_space.n,), dtype=np.float32)
+        if self.masking_strategy == "pre":
+            self._update_mask(observation)
+
+        mask = self.state_dependant_action_mask.get(
+            str(observation),
+            np.ones((self.action_space.n,), dtype=np.float32),
         )
 
         masked_observation = {
-            "action_mask": state_mask,
+            "action_mask": mask,
             "observations": observation,
         }
+
         return masked_observation, info

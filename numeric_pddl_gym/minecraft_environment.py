@@ -11,6 +11,9 @@ from .pddl_masked_environment import PDDLMaskedEnv
 
 class MinecraftEnv(PDDLMaskedEnv):
     def __init__(self, config: Dict[str, Any] = None):
+        if config.get("masking_strategy", "post") == "pre":
+            raise ValueError("Pre-action masking is not supported in MinecraftEnv.")
+
         super().__init__(config)
 
         self.map_size = config["map_size"] ** 2
