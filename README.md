@@ -25,14 +25,15 @@ The environment converts states, actions, and goals from Numeric PDDL into fixed
 
 The environment is configured via a dictionary (`env_config`).
 
-| Parameter | Type | Description |
-|----------|------|------------|
-| `domain_path` | `Path` | Path to the PDDL domain file |
-| `problems_list` | `List[Path]` | List of problem files |
-| `max_steps` | `int` | Max steps per episode |
-| `executing_algorithm` | `str` | Name of RL algorithm (e.g., `"PPO"`) |
-| `masking_strategy` | `"pre"` or `"post"` | `"pre"`: Filters invalid actions before execution using PDDL checks.<br>`"post"`: Learns invalid actions after execution from feedback. |
-| `map_size` | `int` | (MinecraftEnv only) Grid size, e.g., 6, 10, 15. |
+| Parameter | Type | Relevant Env | Description |
+|----------|------|--------------|------------|
+| `domain_path` | `Path` | All | Path to the PDDL domain file |
+| `problems_list` | `List[Path]` | All | List of problem files |
+| `max_steps` | `int` | All | Max steps per episode |
+| `executing_algorithm` | `str` | All | Name of RL algorithm (e.g., `"PPO"`) |
+| `masking_strategy` | `"pre"` or `"post"` | PDDLMaskedEnv | `"pre"`: Filters invalid actions before execution using PDDL checks.<br>`"post"`: Learns invalid actions after execution from feedback. |
+| `count_inapplicable` | `bool` | PDDLMaskedEnv | Relevant when using `"post"` masking.<br>If `true`, inapplicable actions count toward the episode length; if `false`, they are ignored. |
+| `map_size` | `int` | MinecraftEnv | Grid size, e.g., 6, 10, 15. |
 
 ## 🚀 Installation
 
