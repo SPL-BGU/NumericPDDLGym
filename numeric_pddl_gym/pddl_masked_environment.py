@@ -14,6 +14,10 @@ class PDDLMaskedEnv(PDDLEnv):
     masking_strategy:
         - "post": learn invalid actions after execution (reactive)
         - "pre": compute valid actions before execution (proactive)
+
+    count_inapplicable:
+        Only relevant for post-masking.
+        Whether to count inapplicable actions in episode length.
     """
 
     def __init__(self, config):
@@ -21,6 +25,9 @@ class PDDLMaskedEnv(PDDLEnv):
 
         # Strategy selection
         self.masking_strategy = config.get("masking_strategy", "post")
+
+        # Count inapplicable actions
+        self.count_inapplicable = config.get("count_inapplicable", True)
 
         self.state_dependant_action_mask = {}
         self.reset_action_mask_between_problems = len(config["problems_list"]) != 1
@@ -104,6 +111,10 @@ class PDDLMaskedEnv(PDDLEnv):
             "action_mask": mask,
             "observations": observation,
         }
+
+        if not self.count_inapplicable and info["is_inapplicable"]:
+            self.steps -= 1
+            truncated = self.steps >= self.max_steps
 
         return masked_observation, reward, done, truncated, info
 

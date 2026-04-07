@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.1] - 2026-03-12
+### Added
+- Introduced count_inapplicable parameter in PDDLMaskedEnv for episode length calculation.
+    - Relevant when using post-masking.
+    - When enabled, inapplicable actions contribute to the episode length; otherwise, they are ignored.
+
 ## [1.1.0] - 2026-03-11
 ### Added
 - Configurable action masking strategies: `"pre"` (filters invalid actions before execution) and `"post"` (learns invalid actions from environment feedback)
