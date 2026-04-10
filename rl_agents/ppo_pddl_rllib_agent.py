@@ -8,10 +8,10 @@ from ray.rllib.core.rl_module import RLModuleSpec
 import sys
 
 sys.path.append(".")
-from rl_agents.logging_callbacks import LogAlgorithmActions
+from .logging_callbacks import LogAlgorithmActions
 from numeric_pddl_gym.pddl_masked_environment import PDDLMaskedEnv
 from numeric_pddl_gym.minecraft_environment import MinecraftEnv
-from rl_agents.ppo_valid_actions_module import ActionMaskingTorchRLModule
+from .ppo_valid_actions_module import ActionMaskingTorchRLModule
 
 import os, random, numpy as np, torch
 
