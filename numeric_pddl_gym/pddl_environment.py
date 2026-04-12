@@ -219,14 +219,15 @@ class PDDLEnv(gym.Env):
         self.vocabulary_creator = VocabularyCreator()
 
         # --- Build grounded vocabularies
-        self.grounded_actions = sorted(
-            list(
-                self.vocabulary_creator.create_grounded_actions_vocabulary(
-                    self.domain, self.current_problem.objects
-                )
-            ),
-            key=lambda a: str(a),
-        )
+        pairs = [
+            (str(action), action)
+            for action in self.vocabulary_creator.create_grounded_actions_vocabulary(
+                self.domain, self.current_problem.objects
+            )
+        ]
+        pairs.sort(key=lambda x: x[0])
+        self.grounded_actions = [a for _, a in pairs]
+        self.grounded_actions_map = {s: i for i, (s, _) in enumerate(pairs)}
         grounded_predicates = (
             self.vocabulary_creator.create_grounded_predicate_vocabulary(
                 self.domain, self.current_problem.objects
@@ -269,6 +270,22 @@ class PDDLEnv(gym.Env):
     def get_action_from_rl(self, rl_action):
         """Converts the action received from the RL agent (as an index) to the corresponding grounded action in the PDDL domain."""
         return self.grounded_actions[rl_action]
+
+    def get_action_from_planning(self, pddl_action):
+        if pddl_action == "NOP":
+            raise ValueError(f"Action not found: {pddl_action}")
+
+        action = self.grounded_actions_map.get(pddl_action)
+        if action is not None:
+            return action
+
+        pddl_action = pddl_action.replace(")", " )")
+        action = self.grounded_actions_map.get(pddl_action)
+
+        if action is None:
+            raise ValueError(f"Action not found: {pddl_action}")
+
+        return action
 
     def get_pddl_state(self):
         """Returns the current state in a format that can be easily parsed and used by PDDL-based algorithms."""

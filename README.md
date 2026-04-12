@@ -49,8 +49,16 @@ pip install numeric_pddl_gym[rl_agents]
 
 ## ▶️ Run Example
 
+### RL Agent
 ```
 python rl_agents/ppo_pddl_rllib_agent.py
+```
+
+### Planning Agent
+
+See example for a planning-based agent in:
+```
+test/test_fixed_script_agent.py
 ```
 
 ## ⚠️ Limitations
