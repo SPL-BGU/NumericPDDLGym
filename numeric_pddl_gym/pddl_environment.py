@@ -19,11 +19,28 @@ from pddl_plus_parser.models import (
     Problem,
 )
 
-from .misc import (
-    get_grounded_predicates_space_size,
-    get_actions_space_size,
-)
 import random
+
+# --- Performance patch: memoize State.serialize per instance. From here ----------
+# pddl_plus_parser's GroundedPrecondition._validate_predicates_hold checks every
+# precondition via `predicate_repr in state.serialize()`, re-serializing the whole
+# state for every operator applicability check. With large grounded action spaces
+# (e.g. pogo_stick/med: ~10.6k operators) the pre-masking in PDDLMaskedEnv calls
+# is_applicable for every operator per state, causing ~300k serializations per step.
+# States are never mutated in place after creation (Operator.apply returns a new
+# State), so caching the serialized string per instance is safe.
+_original_state_serialize = State.serialize
+
+
+def _cached_state_serialize(self):
+    cache = self.__dict__.get("_serialize_cache")
+    if cache is None:
+        cache = self.__dict__["_serialize_cache"] = _original_state_serialize(self)
+    return cache
+
+
+State.serialize = _cached_state_serialize
+# --- to here ---------- 
 
 
 class PDDLEnv(gym.Env):
@@ -44,26 +61,55 @@ class PDDLEnv(gym.Env):
         self.goal_reward = 1.0
 
         self.domain = DomainParser(domain_path=config["domain_path"]).parse_domain()
-        self.current_problem = ProblemParser(
-            problem_path=config["problems_list"][0], domain=self.domain
-        ).parse_problem()
+        
         self.problem_paths_list: List[Path] = config.get("problems_list", [])
-        self._problem_name = config["problems_list"][0].stem
+        self._problem_name = self.problem_paths_list[0].stem
         self._domain_name = config["domain_path"].stem
         self._executing_algorithm = config.get("executing_algorithm", "Unknown")
-        self.vocabulary_creator = None
+        self.vocabulary_creator = VocabularyCreator()
+        
+        global_objects = {}
+        global_fluents = {}
+        
+        for prob_path in self.problem_paths_list:
+            prob = ProblemParser(problem_path=prob_path, domain=self.domain).parse_problem()
+            global_objects.update(prob.objects)
+            for fluent in prob.initial_state_fluents.values():
+                global_fluents[fluent.untyped_representation] = fluent
+                
+        # --- Build Global Grounded Vocabularies
+        pairs = [
+            (str(action), action)
+            for action in self.vocabulary_creator.create_grounded_actions_vocabulary(
+                self.domain, global_objects
+            )
+        ]
+        pairs.sort(key=lambda x: x[0])
+        self.grounded_actions = [a for _, a in pairs]
+        self.grounded_actions_map = {s: i for i, (s, _) in enumerate(pairs)}
+        
+        grounded_predicates = (
+            self.vocabulary_creator.create_grounded_predicate_vocabulary(
+                self.domain, global_objects
+            )
+        )
         self.grounded_predicates = []
-        self.grounded_functions = []
-        self.grounded_actions = []
+        for predicates_set in grounded_predicates.values():
+            self.grounded_predicates.extend([p.copy() for p in predicates_set])
+            
+        self.grounded_predicates.sort(key=lambda p: p.untyped_representation)
+        
+        self.grounded_functions = sorted(
+            list(global_fluents.values()),
+            key=lambda f: f.untyped_representation,
+        )
+
         self.state = None
         self.steps = 0
-        num_predicates = get_grounded_predicates_space_size(
-            domain=self.domain, problem=self.current_problem
-        )
-        num_functions = len(self.current_problem.initial_state_fluents)
-        num_grounded_actions = get_actions_space_size(
-            domain=self.domain, problem=self.current_problem
-        )
+        
+        num_predicates = len(self.grounded_predicates)
+        num_functions = len(self.grounded_functions)
+        num_grounded_actions = len(self.grounded_actions)
 
         # currently supporting only boolean goals.
         self.goal_in_state = bool(self.config.get("goal_in_state", False))
@@ -90,6 +136,9 @@ class PDDLEnv(gym.Env):
         self.action_space = spaces.Discrete(num_grounded_actions)
         self.last_action = None
         self.change_problem = True
+        
+        # Load the initial problem to set current_problem and initial state correctly
+        self._load_problem(self.problem_paths_list[0])
 
     def _assign_state_fluent_value(
         self,
@@ -123,10 +172,10 @@ class PDDLEnv(gym.Env):
         :param state: the PDDL state to convert.
         :return: the observation representation of the state.
         """
-        predicate_values = np.zeros((len(self.grounded_predicates),), dtype=np.float32)
+        predicate_values = self.predicate_default_values.copy()
         function_values = np.zeros((len(self.grounded_functions),), dtype=np.float32)
 
-        for grounded_predicate in self.grounded_predicates:
+        for i, grounded_predicate in enumerate(self.grounded_predicates):
             if (
                 grounded_predicate.lifted_untyped_representation
                 not in state.state_predicates
@@ -143,15 +192,11 @@ class PDDLEnv(gym.Env):
                     grounded_predicate.grounded_objects
                     == state_predicate.grounded_objects
                 ):
-                    predicate_values[
-                        self.grounded_predicates.index(grounded_predicate)
-                    ] = 1.0
+                    predicate_values[i] = 1.0
                     break
 
         if self.goal_in_state:
-            goal_predicates = np.zeros(
-                (len(self.grounded_predicates),), dtype=np.float32
-            )
+            goal_predicates = self.predicate_default_values.copy()
 
             for predicate in sorted(
                 self.current_problem.goal_state_predicates,
@@ -165,7 +210,7 @@ class PDDLEnv(gym.Env):
                 grounded_function.untyped_representation
             )
             function_values[i] = (
-                float(pddl_func.value) if pddl_func is not None else 0.0
+                float(pddl_func.value) if pddl_func is not None else -1.0
             )
 
         if self.goal_in_state:
@@ -216,33 +261,23 @@ class PDDLEnv(gym.Env):
         ).parse_problem()
         self._problem_name = problem_path.stem
         self.logger.debug("Problem loaded. {}".format(str(self.current_problem)))
-        self.vocabulary_creator = VocabularyCreator()
 
-        # --- Build grounded vocabularies
-        pairs = [
-            (str(action), action)
-            for action in self.vocabulary_creator.create_grounded_actions_vocabulary(
-                self.domain, self.current_problem.objects
-            )
-        ]
-        pairs.sort(key=lambda x: x[0])
-        self.grounded_actions = [a for _, a in pairs]
-        self.grounded_actions_map = {s: i for i, (s, _) in enumerate(pairs)}
-        grounded_predicates = (
-            self.vocabulary_creator.create_grounded_predicate_vocabulary(
-                self.domain, self.current_problem.objects
-            )
-        )
-        self.grounded_predicates = []
-        for predicates_set in grounded_predicates.values():
-            self.grounded_predicates.extend([p.copy() for p in predicates_set])
-
-        self.grounded_predicates.sort(key=lambda p: p.untyped_representation)
-        self.grounded_functions = sorted(
-            list(self.current_problem.initial_state_fluents.values()),
-            key=lambda f: f.untyped_representation,
-        )
         # --- Spaces
+        
+        # Precompute default predicate values for this problem (0.0 for False, -1.0 for Not Exist)
+        valid_pred_dict = self.vocabulary_creator.create_grounded_predicate_vocabulary(
+            self.domain, self.current_problem.objects
+        )
+        valid_preds = set()
+        for p_set in valid_pred_dict.values():
+            for p in p_set:
+                valid_preds.add(p.untyped_representation)
+                
+        self.predicate_default_values = np.full((len(self.grounded_predicates),), -1.0, dtype=np.float32)
+        for i, p in enumerate(self.grounded_predicates):
+            if p.untyped_representation in valid_preds:
+                self.predicate_default_values[i] = 0.0
+                
         self.state = State(
             predicates=self.current_problem.initial_state_predicates,
             fluents=self.current_problem.initial_state_fluents,

@@ -1,4 +1,3 @@
-from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -21,16 +20,17 @@ class PDDLMaskedEnv(PDDLEnv):
     """
 
     def __init__(self, config):
-        super().__init__(config)
-
         # Strategy selection
-        self.masking_strategy = config.get("masking_strategy", "post")
+        self.masking_strategy = config.get("masking_strategy", "pre")
 
         # Count inapplicable actions
         self.count_inapplicable = config.get("count_inapplicable", True)
 
         self.state_dependant_action_mask = {}
-        self.reset_action_mask_between_problems = len(config["problems_list"]) != 1
+        self.reset_action_mask_between_problems = "problems_list" in config and len(config["problems_list"]) != 1
+
+        super().__init__(config)
+
         self.observation_space = Dict(
             {
                 "action_mask": Box(
@@ -53,16 +53,20 @@ class PDDLMaskedEnv(PDDLEnv):
 
         # ---------- PRE-ACTION MASKING ----------
         if self.masking_strategy == "pre":
-            applicable_actions = []
+            if getattr(self, "_cached_operators", None) is None:
+                self._cached_operators = [
+                    Operator(
+                        action=self.domain.actions[operator.name],
+                        domain=self.domain,
+                        grounded_action_call=operator.parameters,
+                        problem_objects=self.current_problem.objects,
+                    )
+                    for operator in self.grounded_actions
+                ]
 
-            for operator in self.grounded_actions:
-                op = Operator(
-                    action=self.domain.actions[operator.name],
-                    domain=self.domain,
-                    grounded_action_call=operator.parameters,
-                    problem_objects=self.current_problem.objects,
-                )
-                applicable_actions.append(op.is_applicable(self.state))
+            applicable_actions = [
+                op.is_applicable(self.state) for op in self._cached_operators
+            ]
 
             self.state_dependant_action_mask[state_key] = np.array(
                 applicable_actions, dtype=np.float32
@@ -86,6 +90,8 @@ class PDDLMaskedEnv(PDDLEnv):
 
         if self.reset_action_mask_between_problems:
             self.state_dependant_action_mask = {}
+
+        self._cached_operators = None
 
     def step(self, action_index: int):
         prev_state = self.env_state.copy()
